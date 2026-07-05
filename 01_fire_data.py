@@ -63,6 +63,8 @@ WFIGS_URL = (
 def download_fires(base_url, params):
     all_features = []
     offset = 0
+
+    # loop to download all records in batches of 2000 until there are no more records left
     while True:
         params["resultOffset"] = offset
         resp = requests.get(base_url, params=params, timeout=60)
