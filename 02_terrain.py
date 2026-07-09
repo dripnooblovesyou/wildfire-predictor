@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 from xrspatial import slope, aspect
+from rasterio.warp import calculate_default_transform, reproject, Resampling
 
 load_dotenv()
 
@@ -69,8 +70,55 @@ plt.title("PNW Elevation (SRTM 90m)")
 plt.savefig("elevation_map.png", dpi=120)
 print("Saved elevation_map.png")
 
-# wrap the elevation array as an xarray DataArray
-dem = xr.DataArray(elevation, dims=["y", "x"])
+# reproject to UTM (meters) so slope math is correct
+dst_crs = "EPSG:32610"  # UTM Zone 10N, units in meters
+proj_path = RAW / "pnw_srtm30_utm.tif"
+
+with rasterio.open(out_path) as src:
+    transform, width, height = calculate_default_transform(
+        src.crs, dst_crs, src.width, src.height, *src.bounds
+    )
+    profile = src.profile.copy()
+    profile.update(crs=dst_crs, transform=transform, width=width, height=height)
+
+    with rasterio.open(proj_path, "w", **profile) as dst:
+        reproject(
+            source=rasterio.band(src, 1),
+            destination=rasterio.band(dst, 1),
+            src_transform=src.transform,
+            src_crs=src.crs,
+            dst_transform=transform,
+            dst_crs=dst_crs,
+            resampling=Resampling.bilinear,
+        )
+
+print("Reprojected to UTM.")
+
+# read reprojected elevation and compute slope + aspect
+with rasterio.open(proj_path) as src:
+    elevation_utm = src.read(1)
+    utm_profile = src.profile.copy()
+
+with rasterio.open(proj_path) as src:
+    print("Pixel width (m):", src.transform[0])
+    print("Pixel height (m):", -src.transform[4])
+
+# compute slope and aspect using xrspatial
+with rasterio.open(proj_path) as src:
+    elevation_utm = src.read(1)
+    utm_profile = src.profile.copy()
+    transform = src.transform
+    h, w = elevation_utm.shape
+
+# build coordinate arrays in meters from the transform
+xs = transform[2] + transform[0] * (np.arange(w) + 0.5)
+ys = transform[5] + transform[4] * (np.arange(h) + 0.5)
+
+dem = xr.DataArray(
+    elevation_utm.astype("float32"),
+    dims=["y", "x"],
+    coords={"y": ys, "x": xs},
+)
 
 slope_data = slope(dem)
 aspect_data = aspect(dem)
@@ -78,15 +126,20 @@ aspect_data = aspect(dem)
 print("Slope range:", float(slope_data.min()), "to", float(slope_data.max()), "degrees")
 print("Aspect range:", float(aspect_data.min()), "to", float(aspect_data.max()), "degrees")
 
-# save slope and aspect as GeoTIFFs, copying the geo-info from the source
-with rasterio.open(out_path) as src:
-    profile = src.profile
-    profile.update(dtype="float32", count=1)
+sv = slope_data.values
+sv = sv[~np.isnan(sv)]
+print("Slope percentiles:")
+print("  50th (median):", np.percentile(sv, 50))
+print("  90th:", np.percentile(sv, 90))
+print("  99th:", np.percentile(sv, 99))
 
-    with rasterio.open(RAW / "pnw_slope.tif", "w", **profile) as dst:
-        dst.write(slope_data.values.astype("float32"), 1)
+# save slope and aspect with correct UTM geo-info
+utm_profile.update(dtype="float32", count=1)
 
-    with rasterio.open(RAW / "pnw_aspect.tif", "w", **profile) as dst:
-        dst.write(aspect_data.values.astype("float32"), 1)
+with rasterio.open(RAW / "pnw_slope.tif", "w", **utm_profile) as dst:
+    dst.write(slope_data.values.astype("float32"), 1)
+
+with rasterio.open(RAW / "pnw_aspect.tif", "w", **utm_profile) as dst:
+    dst.write(aspect_data.values.astype("float32"), 1)
 
 print("Saved slope and aspect")
