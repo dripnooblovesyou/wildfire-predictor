@@ -1,34 +1,19 @@
-from pyhdf.SD import SD, SDC
+import zipfile
+import xarray as xr
 from pathlib import Path
-import numpy as np
 
-# grab the first NDVI file
-f = list(Path("data/raw/ndvi").glob("*.hdf"))[0]
-print("Opening:", f.name)
+zip_path = Path("data/raw/weather/era5_2020_summer.nc")
+extract_dir = Path("data/raw/weather/extracted")
+extract_dir.mkdir(exist_ok=True)
 
-hdf = SD(str(f), SDC.READ)
+with zipfile.ZipFile(zip_path) as z:
+    z.extractall(extract_dir)
 
-ndvi_dataset = hdf.select("1 km monthly NDVI")
-ndvi = ndvi_dataset.get()
+# open the instantaneous variables
+inst = xr.open_dataset(extract_dir / "data_stream-oper_stepType-instant.nc")
+print("=== INSTANT ===")
+print(inst)
 
-print("Shape:", ndvi.shape)
-print("Data type:", ndvi.dtype)
-print("Raw value range:", ndvi.min(), "to", ndvi.max())
-
-# check the scale factor and fill value stored in the file's attributes
-attrs = ndvi_dataset.attributes()
-print("\nScale factor:", attrs.get("scale_factor"))
-print("Fill value:", attrs.get("_FillValue"))
-print("Valid range:", attrs.get("valid_range"))
-
-# convert raw integers to real NDVI values
-ndvi_real = ndvi.astype(float)
-
-# mask out fill values (missing data) before scaling
-ndvi_real[ndvi == -3000] = np.nan
-
-# apply scale factor
-ndvi_real = ndvi_real / 10000.0
-
-print("Real NDVI range:", np.nanmin(ndvi_real), "to", np.nanmax(ndvi_real))
-print("Mean NDVI:", np.nanmean(ndvi_real))
+print("\n=== ACCUM ===")
+accum = xr.open_dataset(extract_dir / "data_stream-oper_stepType-accum.nc")
+print(accum)
