@@ -10,38 +10,30 @@ print("Fires loaded:", len(fires))
 # reproject to UTM so distances are in meters
 fires_utm = fires.to_crs("EPSG:32610")
 
-# now centroids are computed in meter-space (geometrically correct)
+# repair any invalid fire geometries (self-intersections etc.)
+fires_utm["geometry"] = fires_utm.geometry.buffer(0)
+
+# compute centroids in meter-space (geometrically correct)
 fires_utm["centroid"] = fires_utm.geometry.centroid
 
 print(fires_utm[["incidentname", "fireyear", "centroid"]].head())
 
+
 def make_control_point(x, y, rng):
     """Given a fire centroid (x, y) in meters, return one control point 25-100km away."""
-    distance = rng.uniform(25_000, 100_000)   # meters
-    angle = rng.uniform(0, 2 * np.pi)          # radians
-    
+    distance = rng.uniform(25_000, 100_000)
+    angle = rng.uniform(0, 2 * np.pi)
     new_x = x + distance * np.cos(angle)
     new_y = y + distance * np.sin(angle)
-    
     return new_x, new_y
 
-rng = np.random.default_rng(42)   # seed for reproducibility
 
-first = fires_utm["centroid"].iloc[0]
-print("Fire at:", first.x, first.y)
-
-for i in range(5):
-    cx, cy = make_control_point(first.x, first.y, rng)
-    dist = np.sqrt((cx - first.x)**2 + (cy - first.y)**2)
-    print(f"  Control {i+1}: {cx:.0f}, {cy:.0f}  (distance: {dist/1000:.1f} km)")
-
-# study area boundary in UTM (reproject the PNW box)
+# study area boundary in UTM
 pnw_box = gpd.GeoDataFrame(
     geometry=[box(-124.8, 42.0, -116.5, 49.0)],
     crs="EPSG:4326"
 ).to_crs("EPSG:32610")
 study_area = pnw_box.geometry.iloc[0]
-
 print("Study area bounds (UTM):", study_area.bounds)
 
 def is_valid_control(x, y, year, fires_utm, study_area):
@@ -93,3 +85,18 @@ df = pd.DataFrame(rows)
 print("Total rows:", len(df))
 print("Label counts:")
 print(df["label"].value_counts())
+
+# build Point geometries from the x, y columns
+df["geometry"] = [Point(x, y) for x, y in zip(df["x"], df["y"])]
+
+# TODO: wrap df as a GeoDataFrame, specifying geometry="geometry" and crs="EPSG:32610"
+gdf = gpd.GeoDataFrame(df, geometry="geometry", crs="EPSG:32610")
+
+# make an output folder for processed data
+from pathlib import Path
+PROC = Path("data/processed")
+PROC.mkdir(parents=True, exist_ok=True)
+
+# save it
+gdf.to_file(PROC / "training_points.gpkg", driver="GPKG")
+print("Saved", len(gdf), "points")
