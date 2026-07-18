@@ -2,6 +2,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 from shapely.geometry import Point, box
+import rasterio
 
 
 fires = gpd.read_file("data/raw/fire/pnw_fires_clean.geojson")
@@ -89,7 +90,7 @@ print(df["label"].value_counts())
 # build Point geometries from the x, y columns
 df["geometry"] = [Point(x, y) for x, y in zip(df["x"], df["y"])]
 
-# TODO: wrap df as a GeoDataFrame, specifying geometry="geometry" and crs="EPSG:32610"
+# wrap df as a GeoDataFrame, specifying geometry="geometry" and crs="EPSG:32610"
 gdf = gpd.GeoDataFrame(df, geometry="geometry", crs="EPSG:32610")
 
 # make an output folder for processed data
@@ -100,3 +101,37 @@ PROC.mkdir(parents=True, exist_ok=True)
 # save it
 gdf.to_file(PROC / "training_points.gpkg", driver="GPKG")
 print("Saved", len(gdf), "points")
+
+# extract elevation values
+with rasterio.open("data/raw/terrain/pnw_srtm30_utm.tif") as src:
+    # sample elevation values at each point
+    coords = list(zip(gdf["x"], gdf["y"]))
+    elevations = [val[0] for val in src.sample(coords)]
+
+gdf["elevation"] = elevations
+print(gdf[["x", "y", "label", "elevation"]].head())
+print("Elevation range:", gdf["elevation"].min(), "to", gdf["elevation"].max())
+
+# extract slope values
+with rasterio.open("data/raw/terrain/pnw_slope.tif") as src:
+    coords = list(zip(gdf["x"], gdf["y"]))
+    slopes = [val[0] for val in src.sample(coords)]
+
+gdf["slope"] = slopes
+print(gdf[["x", "y", "label", "slope"]].head())
+print("Slope range:", gdf["slope"].min(), "to", gdf["slope"].max())
+
+# extract aspect values
+with rasterio.open("data/raw/terrain/pnw_aspect.tif") as src:
+    coords = list(zip(gdf["x"], gdf["y"]))
+    aspects = [val[0] for val in src.sample(coords)]
+
+gdf["aspect"] = aspects
+print(gdf[["x", "y", "label", "aspect"]].head())
+print("Aspect range:", gdf["aspect"].min(), "to", gdf["aspect"].max())
+
+# convert aspect to northness and eastness
+gdf["northness"] = np.cos(np.radians(gdf["aspect"]))
+gdf["eastness"] = np.sin(np.radians(gdf["aspect"]))
+
+print(gdf[["aspect", "northness", "eastness"]].head())
