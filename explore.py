@@ -1,19 +1,16 @@
-import zipfile
-import xarray as xr
-from pathlib import Path
+import rasterio
+import matplotlib.pyplot as plt
 
-zip_path = Path("data/raw/weather/era5_2020_summer.nc")
-extract_dir = Path("data/raw/weather/extracted")
-extract_dir.mkdir(exist_ok=True)
+with rasterio.open("data/processed/ndvi/ndvi_2015_07.tif") as src:
+    ndvi = src.read(1)
+    bounds = src.bounds
+    print("Shape:", src.width, "x", src.height)
+    print("Bounds:", bounds)
 
-with zipfile.ZipFile(zip_path) as z:
-    z.extractall(extract_dir)
-
-# open the instantaneous variables
-inst = xr.open_dataset(extract_dir / "data_stream-oper_stepType-instant.nc")
-print("=== INSTANT ===")
-print(inst)
-
-print("\n=== ACCUM ===")
-accum = xr.open_dataset(extract_dir / "data_stream-oper_stepType-accum.nc")
-print(accum)
+plt.figure(figsize=(10, 8))
+plt.imshow(ndvi, cmap="RdYlGn",
+           extent=[bounds.left, bounds.right, bounds.bottom, bounds.top])
+plt.colorbar(label="NDVI")
+plt.title("NDVI (2015-07)")
+plt.savefig("ndvi_map.png", dpi=120)
+print("Saved")
