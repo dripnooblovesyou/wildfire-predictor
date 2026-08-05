@@ -135,3 +135,28 @@ gdf["northness"] = np.cos(np.radians(gdf["aspect"]))
 gdf["eastness"] = np.sin(np.radians(gdf["aspect"]))
 
 print(gdf[["aspect", "northness", "eastness"]].head())
+
+# extract NDVI values for each fire-season month (one column per month, e.g. ndvi_06)
+NDVI_DIR = Path("data/processed/ndvi")
+
+for month in [6, 7, 8, 9]:
+    col = f"ndvi_{month:02d}"
+    gdf[col] = np.nan
+
+    # group points by year so each year's raster is only opened once
+    for year in gdf["year"].unique():
+        raster_path = NDVI_DIR / f"ndvi_{int(year)}_{month:02d}.tif"
+        if not raster_path.exists():
+            print(f"  Missing raster: {raster_path.name}")
+            continue
+
+        # filter to just this year's points, then sample them all at once
+        year_mask = gdf["year"] == year
+        coords = list(zip(gdf.loc[year_mask, "x"], gdf.loc[year_mask, "y"]))
+
+        with rasterio.open(raster_path) as src:
+            values = [val[0] for val in src.sample(coords)]
+
+        gdf.loc[year_mask, col] = values
+
+    print(f"{col} range:", gdf[col].min(), "to", gdf[col].max())
