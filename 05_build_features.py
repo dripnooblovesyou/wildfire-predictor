@@ -160,3 +160,34 @@ for month in [6, 7, 8, 9]:
         gdf.loc[year_mask, col] = values
 
     print(f"{col} range:", gdf[col].min(), "to", gdf[col].max())
+
+# reproject to lat/lon (weather lookups need lat/lon, not UTM meters)
+gdf_latlon = gdf.to_crs("EPSG:4326")
+gdf["lon"] = gdf_latlon.geometry.x
+gdf["lat"] = gdf_latlon.geometry.y
+
+print(gdf[["x", "y", "lon", "lat"]].head())
+
+import xarray as xr
+import zipfile
+
+WEATHER_DIR = Path("data/raw/weather")
+WEATHER_TMP = Path("data/tmp/weather")
+WEATHER_TMP.mkdir(parents=True, exist_ok=True)
+
+def open_weather_year(year):
+    """Unzip and open the instant + accum NetCDF files for one year."""
+    zip_path = WEATHER_DIR / f"era5_{year}_summer.nc"
+    extract_dir = WEATHER_TMP / str(year)
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        zf.extractall(extract_dir)
+    instant_path = extract_dir / "data_stream-oper_stepType-instant.nc"
+    accum_path = extract_dir / "data_stream-oper_stepType-accum.nc"
+
+    inst = xr.open_dataset(instant_path)
+    accum = xr.open_dataset(accum_path)
+    return inst, accum
+
+inst, accum = open_weather_year(2020)
+print("Instant variables:", list(inst.data_vars))
+print("Accum variables:", list(accum.data_vars))
