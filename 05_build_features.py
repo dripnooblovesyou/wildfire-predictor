@@ -176,18 +176,113 @@ WEATHER_TMP = Path("data/tmp/weather")
 WEATHER_TMP.mkdir(parents=True, exist_ok=True)
 
 def open_weather_year(year):
-    """Unzip and open the instant + accum NetCDF files for one year."""
+    """Unzip (if not already done) and open the instant + accum NetCDF files for one year."""
     zip_path = WEATHER_DIR / f"era5_{year}_summer.nc"
     extract_dir = WEATHER_TMP / str(year)
-    with zipfile.ZipFile(zip_path, "r") as zf:
-        zf.extractall(extract_dir)
+
     instant_path = extract_dir / "data_stream-oper_stepType-instant.nc"
     accum_path = extract_dir / "data_stream-oper_stepType-accum.nc"
+
+    if not instant_path.exists():
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            zf.extractall(extract_dir)
 
     inst = xr.open_dataset(instant_path)
     accum = xr.open_dataset(accum_path)
     return inst, accum
 
+def sample_weather_var(ds, varname, month, lats, lons):
+    """Average a variable over one month, then sample at each (lat, lon)."""
+    # select this month's time steps
+    monthly = ds[varname].sel(valid_time=ds["valid_time"].dt.month == month)
+    # average over time → one value per grid cell
+    monthly_mean = monthly.mean(dim="valid_time")
+    # look up nearest cell for each point
+    sampled = monthly_mean.sel(
+        latitude=xr.DataArray(lats, dims="points"),
+        longitude=xr.DataArray(lons, dims="points"),
+        method="nearest",
+    )
+    return sampled.values
+
 inst, accum = open_weather_year(2020)
-print("Instant variables:", list(inst.data_vars))
-print("Accum variables:", list(accum.data_vars))
+mask_2020 = gdf["year"] == 2020
+lats = gdf.loc[mask_2020, "lat"].values
+lons = gdf.loc[mask_2020, "lon"].values
+
+temps = sample_weather_var(inst, "t2m", 8, lats, lons)
+print("August 2020 temp (Kelvin):", temps.min(), "to", temps.max())
+
+# variables to sample directly (name in file → nice column prefix)
+INSTANT_VARS = {"t2m": "temp", "d2m": "dewpoint", "u10": "wind_u", "v10": "wind_v"}
+
+# initialize all the columns
+for prefix in list(INSTANT_VARS.values()) + ["precip"]:
+    for month in [6, 7, 8, 9]:
+        gdf[f"{prefix}_{month:02d}"] = np.nan
+
+# loop over years, open each year's weather once, sample all variables/months
+for year in sorted(gdf["year"].unique()):
+    zip_path = WEATHER_DIR / f"era5_{year}_summer.nc"
+    if not zip_path.exists():
+        print(f"  Missing weather: {year}")
+        continue
+
+    inst, accum = open_weather_year(year)
+
+    mask = gdf["year"] == year
+    lats = gdf.loc[mask, "lat"].values
+    lons = gdf.loc[mask, "lon"].values
+
+    for month in [6, 7, 8, 9]:
+        # sample each instant variable and assign to gdf.loc[mask, f"{prefix}_{month:02d}"]
+        for varname, prefix in INSTANT_VARS.items():
+            sampled = sample_weather_var(inst, varname, month, lats, lons)
+            gdf.loc[mask, f"{prefix}_{month:02d}"] = sampled
+        # sample precip from accum the same way
+        sampled = sample_weather_var(accum, "tp", month, lats, lons)
+        gdf.loc[mask, f"precip_{month:02d}"] = sampled
+
+    inst.close()
+    accum.close()
+    print(f"  Sampled {year}")
+
+for month in [6, 7, 8, 9]:
+    u = gdf[f"wind_u_{month:02d}"]
+    v = gdf[f"wind_v_{month:02d}"]
+    gdf[f"windspeed_{month:02d}"] = np.sqrt(u**2 + v**2)
+
+print(gdf[[f"windspeed_{m:02d}" for m in [6,7,8,9]]].describe())
+
+def relative_humidity(temp_k, dewpoint_k):
+    """Compute RH (%) from temperature and dewpoint in Kelvin."""
+    temp_c = temp_k - 273.15
+    dew_c = dewpoint_k - 273.15
+    # Magnus formula
+    b, c = 17.625, 243.04
+    e_temp = np.exp((b * temp_c) / (c + temp_c))
+    e_dew = np.exp((b * dew_c) / (c + dew_c))
+    return 100.0 * (e_dew / e_temp)
+
+for month in [6, 7, 8, 9]:
+    t = gdf[f"temp_{month:02d}"]
+    d = gdf[f"dewpoint_{month:02d}"]
+    gdf[f"humidity_{month:02d}"] = relative_humidity(t, d)
+
+print(gdf[[f"humidity_{m:02d}" for m in [6,7,8,9]]].describe())
+
+for month in [6, 7, 8, 9]:
+    gdf[f"temp_{month:02d}"] = gdf[f"temp_{month:02d}"] - 273.15
+
+print(gdf[[f"temp_{m:02d}" for m in [6,7,8,9]]].describe())
+
+# drop the temporary lat/lon helper columns if you want, or keep them
+# save the completed feature table
+OUT = Path("data/processed")
+gdf.to_file(OUT / "training_features.gpkg", driver="GPKG")
+
+# also save as CSV (drop geometry for a flat table)
+gdf.drop(columns="geometry").to_csv(OUT / "training_features.csv", index=False)
+
+print("Saved training table:", gdf.shape)
+print("Columns:", list(gdf.columns))
