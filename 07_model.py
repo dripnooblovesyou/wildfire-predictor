@@ -3,6 +3,8 @@ from sklearn.model_selection import GroupKFold
 from xgboost import XGBClassifier
 from sklearn.metrics import roc_auc_score, average_precision_score
 import numpy as np
+import shap
+import matplotlib.pyplot as plt
 
 df = pd.read_csv("data/processed/training_features.csv")
 print("Loaded:", df.shape)
@@ -85,3 +87,56 @@ for i, (train_idx, test_idx) in enumerate(gkf.split(X, y, groups)):
 print()
 print(f"Mean AUC-ROC: {np.mean(auc_roc_scores):.3f} ± {np.std(auc_roc_scores):.3f}")
 print(f"Mean AUC-PR:  {np.mean(auc_pr_scores):.3f} ± {np.std(auc_pr_scores):.3f}")
+
+# train one final model on all the data (same hyperparameters as the CV folds)
+final_model = XGBClassifier(
+    n_estimators=300,
+    max_depth=5,
+    learning_rate=0.05,
+    subsample=0.8,
+    colsample_bytree=0.8,
+    scale_pos_weight=5,
+    random_state=42,
+    eval_metric="logloss",
+)
+final_model.fit(X, y)
+
+# pair feature names with their importances and sort, most important first
+importances = sorted(
+    zip(FEATURES, final_model.feature_importances_),
+    key=lambda pair: pair[1],
+    reverse=True,
+)
+
+print()
+print("Feature importances:")
+for name, importance in importances:
+    print(f"  {name}: {importance:.4f}")
+
+# use a sample for speed
+X_sample = X.sample(2000, random_state=42)
+
+# TreeExplainer is optimized for tree models like XGBoost
+explainer = shap.TreeExplainer(final_model)
+shap_values = explainer.shap_values(X_sample)
+
+print("SHAP values shape:", shap_values.shape)
+
+# mean absolute SHAP value per feature = overall importance
+import numpy as np
+mean_abs_shap = np.abs(shap_values).mean(axis=0)
+
+shap_importance = sorted(
+    zip(FEATURES, mean_abs_shap),
+    key=lambda pair: pair[1],
+    reverse=True,
+)
+
+print("\nSHAP feature importance (mean |SHAP|):")
+for name, val in shap_importance:
+    print(f"  {name}: {val:.4f}")
+
+shap.summary_plot(shap_values, X_sample, feature_names=FEATURES, show=False)
+plt.tight_layout()
+plt.savefig("shap_summary.png", dpi=120, bbox_inches="tight")
+print("Saved shap_summary.png")
