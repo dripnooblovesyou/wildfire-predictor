@@ -5,6 +5,7 @@ from sklearn.metrics import roc_auc_score, average_precision_score
 import numpy as np
 import shap
 import matplotlib.pyplot as plt
+import joblib
 
 df = pd.read_csv("data/processed/training_features.csv")
 print("Loaded:", df.shape)
@@ -140,3 +141,7 @@ shap.summary_plot(shap_values, X_sample, feature_names=FEATURES, show=False)
 plt.tight_layout()
 plt.savefig("shap_summary.png", dpi=120, bbox_inches="tight")
 print("Saved shap_summary.png")
+
+import joblib
+joblib.dump(final_model, "data/processed/fire_model.pkl")
+print("Saved model")
