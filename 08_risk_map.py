@@ -6,6 +6,9 @@ import xarray as xr
 import zipfile
 from pathlib import Path
 from pyproj import Transformer
+import matplotlib.pyplot as plt
+import requests
+import geopandas as gpd
 
 model = joblib.load("data/processed/fire_model.pkl")
 print("Model loaded")
@@ -179,3 +182,43 @@ for year in range(2000, 2026):
 risk_avg = risk_sum / years_counted
 print("Years counted:", years_counted)
 print("Risk range:", risk_avg.min(), "to", risk_avg.max())
+
+# reshape flat risk back into the 2D grid
+risk_grid = risk_avg.reshape(xx.shape)
+
+# mask out nodata areas (ocean, off-coverage) using elevation
+elev_grid = elevation.reshape(xx.shape)
+risk_grid = np.where(elev_grid <= 0, np.nan, risk_grid)
+
+# download (and cache) Census state boundaries, then keep just WA/OR/ID
+BOUNDARIES_DIR = Path("data/raw/boundaries")
+BOUNDARIES_DIR.mkdir(parents=True, exist_ok=True)
+states_zip = BOUNDARIES_DIR / "cb_2018_us_state_20m.zip"
+
+if not states_zip.exists():
+    resp = requests.get(
+        "https://www2.census.gov/geo/tiger/GENZ2018/shp/cb_2018_us_state_20m.zip",
+        timeout=60,
+    )
+    resp.raise_for_status()
+    states_zip.write_bytes(resp.content)
+
+states = gpd.read_file(f"zip://{states_zip}")
+pnw_states = states[states["STUSPS"].isin(["WA", "OR", "ID"])].to_crs("EPSG:32610")
+
+fig, ax = plt.subplots(figsize=(10, 9))
+im = ax.imshow(
+    risk_grid,
+    extent=[X_MIN, X_MAX, Y_MIN, Y_MAX],
+    origin="lower",
+    cmap="YlOrRd",
+    vmin=0, vmax=0.6,
+    interpolation="bilinear",
+)
+pnw_states.boundary.plot(ax=ax, edgecolor="black", linewidth=0.8)
+fig.colorbar(im, ax=ax, label="Mean fire ignition risk (2000–2025)")
+ax.set_title("PNW Wildfire Ignition Risk")
+ax.set_xlabel("UTM Easting (m)")
+ax.set_ylabel("UTM Northing (m)")
+fig.savefig("risk_map.png", dpi=140, bbox_inches="tight")
+print("Saved risk_map.png")
