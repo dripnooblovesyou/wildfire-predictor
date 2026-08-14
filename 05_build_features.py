@@ -161,6 +161,30 @@ for month in [6, 7, 8, 9]:
 
     print(f"{col} range:", gdf[col].min(), "to", gdf[col].max())
 
+# NDVI anomaly = actual-year value minus each point's historical (2000-2025) mean for that month
+coords = list(zip(gdf["x"], gdf["y"]))
+
+for month in [6, 7, 8, 9]:
+    # collect this month's NDVI at every point, for every year
+    yearly_stack = []
+    for yr in range(2000, 2026):
+        raster_path = NDVI_DIR / f"ndvi_{yr}_{month:02d}.tif"
+        if not raster_path.exists():
+            continue
+        with rasterio.open(raster_path) as src:
+            vals = np.array([v[0] for v in src.sample(coords)], dtype=float)
+        yearly_stack.append(vals)
+
+    # average across years → historical baseline for this month at each point
+    baseline = np.nanmean(np.vstack(yearly_stack), axis=0)
+
+    # anomaly = actual year value − baseline
+    gdf[f"ndvi_anom_{month:02d}"] = gdf[f"ndvi_{month:02d}"] - baseline
+
+    print(f"ndvi_anom_{month:02d} range:",
+          gdf[f"ndvi_anom_{month:02d}"].min(), "to",
+          gdf[f"ndvi_anom_{month:02d}"].max())
+
 # reproject to lat/lon (weather lookups need lat/lon, not UTM meters)
 gdf_latlon = gdf.to_crs("EPSG:4326")
 gdf["lon"] = gdf_latlon.geometry.x

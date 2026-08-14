@@ -25,6 +25,7 @@ FEATURES = [
     "precip_06", "precip_07", "precip_08", "precip_09",
     "windspeed_06", "windspeed_07", "windspeed_08", "windspeed_09",
     "humidity_06", "humidity_07", "humidity_08", "humidity_09",
+    "ndvi_anom_06", "ndvi_anom_07", "ndvi_anom_08", "ndvi_anom_09",
 ]
 
 X = df[FEATURES]
