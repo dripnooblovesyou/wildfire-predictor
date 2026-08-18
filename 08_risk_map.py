@@ -21,6 +21,7 @@ FEATURES = [
     "precip_06", "precip_07", "precip_08", "precip_09",
     "windspeed_06", "windspeed_07", "windspeed_08", "windspeed_09",
     "humidity_06", "humidity_07", "humidity_08", "humidity_09",
+    "ndvi_anom_06", "ndvi_anom_07", "ndvi_anom_08", "ndvi_anom_09",
 ]
 
 # build a grid over the study area, 5km spacing
@@ -59,6 +60,21 @@ print("Terrain sampled")
 print("Elevation range:", np.nanmin(elevation), "to", np.nanmax(elevation))
 
 NDVI_DIR = Path("data/processed/ndvi")
+
+# historical NDVI baseline at each grid point (mean across all years, per month)
+ndvi_baseline = {}
+for month in [6, 7, 8, 9]:
+    stack = []
+    for yr in range(2000, 2026):
+        rp = NDVI_DIR / f"ndvi_{yr}_{month:02d}.tif"
+        if not rp.exists():
+            continue
+        with rasterio.open(rp) as src:
+            stack.append(np.array([v[0] for v in src.sample(coords)], dtype=float))
+    ndvi_baseline[month] = np.nanmean(np.vstack(stack), axis=0)
+
+print("NDVI baselines computed")
+
 WEATHER_DIR = Path("data/raw/weather")
 WEATHER_TMP = Path("data/tmp/weather")
 WEATHER_TMP.mkdir(parents=True, exist_ok=True)
@@ -126,6 +142,11 @@ for year in range(2000, 2026):
         with rasterio.open(raster_path) as src:
             ndvi_cols[month] = np.array([v[0] for v in src.sample(coords)], dtype=float)
 
+    # anomaly = this year's NDVI − historical baseline
+    ndvi_anom = {}
+    for month in [6, 7, 8, 9]:
+        ndvi_anom[month] = ndvi_cols[month] - ndvi_baseline[month]
+
     # --- sample weather for each month ---
     inst, accum = open_weather_year(year)
 
@@ -170,6 +191,8 @@ for year in range(2000, 2026):
         grid_features[f"windspeed_{month:02d}"] = weather_cols[f"windspeed_{month:02d}"]
     for month in [6, 7, 8, 9]:
         grid_features[f"humidity_{month:02d}"] = weather_cols[f"humidity_{month:02d}"]
+    for month in [6, 7, 8, 9]:
+        grid_features[f"ndvi_anom_{month:02d}"] = ndvi_anom[month]
     grid_features = grid_features[FEATURES]
 
     # --- predict and accumulate ---
