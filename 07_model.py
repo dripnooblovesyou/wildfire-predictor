@@ -28,7 +28,14 @@ FEATURES = [
     "ndvi_anom_06", "ndvi_anom_07", "ndvi_anom_08", "ndvi_anom_09",
 ]
 
-X = df[FEATURES]
+FEATURES_PRESEASON = [
+    "elevation", "slope", "northness", "eastness",
+    "ndvi_06", "ndvi_anom_06",
+    "temp_06", "precip_06", "windspeed_06", "humidity_06",
+]
+
+# X = df[FEATURES]
+X = df[FEATURES_PRESEASON]
 y = df["label"]
 
 print("Feature count:", len(FEATURES))
