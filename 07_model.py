@@ -34,11 +34,22 @@ FEATURES_PRESEASON = [
     "temp_06", "precip_06", "windspeed_06", "humidity_06",
 ]
 
+FEATURES_CLEAN = [
+    "elevation", "slope", "northness", "eastness",
+    "ndvi_06", "ndvi_07",
+    "ndvi_anom_06", "ndvi_anom_07",
+    "temp_06", "temp_07",
+    "precip_06", "precip_07",
+    "windspeed_06", "windspeed_07",
+    "humidity_06", "humidity_07",
+]
+
 # X = df[FEATURES]
-X = df[FEATURES_PRESEASON]
+ACTIVE_FEATURES = FEATURES_CLEAN
+X = df[ACTIVE_FEATURES]
 y = df["label"]
 
-print("Feature count:", len(FEATURES))
+print("Feature count:", len(ACTIVE_FEATURES))
 print("X shape:", X.shape)
 print("y distribution:")
 print(y.value_counts())
@@ -112,7 +123,7 @@ final_model.fit(X, y)
 
 # pair feature names with their importances and sort, most important first
 importances = sorted(
-    zip(FEATURES, final_model.feature_importances_),
+    zip(ACTIVE_FEATURES, final_model.feature_importances_),
     key=lambda pair: pair[1],
     reverse=True,
 )
@@ -136,7 +147,7 @@ import numpy as np
 mean_abs_shap = np.abs(shap_values).mean(axis=0)
 
 shap_importance = sorted(
-    zip(FEATURES, mean_abs_shap),
+    zip(ACTIVE_FEATURES, mean_abs_shap),
     key=lambda pair: pair[1],
     reverse=True,
 )
@@ -145,7 +156,7 @@ print("\nSHAP feature importance (mean |SHAP|):")
 for name, val in shap_importance:
     print(f"  {name}: {val:.4f}")
 
-shap.summary_plot(shap_values, X_sample, feature_names=FEATURES, show=False)
+shap.summary_plot(shap_values, X_sample, feature_names=ACTIVE_FEATURES, show=False)
 plt.tight_layout()
 plt.savefig("shap_summary.png", dpi=120, bbox_inches="tight")
 print("Saved shap_summary.png")

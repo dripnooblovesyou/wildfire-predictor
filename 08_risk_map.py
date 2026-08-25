@@ -13,15 +13,15 @@ import geopandas as gpd
 model = joblib.load("data/processed/fire_model.pkl")
 print("Model loaded")
 
-# same feature order the model was trained on (see 07_model.py)
-FEATURES = [
+# same feature order the model was trained on (see 07_model.py, FEATURES_CLEAN)
+FEATURES_CLEAN = [
     "elevation", "slope", "northness", "eastness",
-    "ndvi_06", "ndvi_07", "ndvi_08", "ndvi_09",
-    "temp_06", "temp_07", "temp_08", "temp_09",
-    "precip_06", "precip_07", "precip_08", "precip_09",
-    "windspeed_06", "windspeed_07", "windspeed_08", "windspeed_09",
-    "humidity_06", "humidity_07", "humidity_08", "humidity_09",
-    "ndvi_anom_06", "ndvi_anom_07", "ndvi_anom_08", "ndvi_anom_09",
+    "ndvi_06", "ndvi_07",
+    "ndvi_anom_06", "ndvi_anom_07",
+    "temp_06", "temp_07",
+    "precip_06", "precip_07",
+    "windspeed_06", "windspeed_07",
+    "humidity_06", "humidity_07",
 ]
 
 # build a grid over the study area, 5km spacing
@@ -193,7 +193,7 @@ for year in range(2000, 2026):
         grid_features[f"humidity_{month:02d}"] = weather_cols[f"humidity_{month:02d}"]
     for month in [6, 7, 8, 9]:
         grid_features[f"ndvi_anom_{month:02d}"] = ndvi_anom[month]
-    grid_features = grid_features[FEATURES]
+    grid_features = grid_features[FEATURES_CLEAN]
 
     # --- predict and accumulate ---
     probs = model.predict_proba(grid_features)[:, 1]
