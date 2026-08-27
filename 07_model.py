@@ -38,10 +38,10 @@ FEATURES_CLEAN = [
     "elevation", "slope", "northness", "eastness",
     "ndvi_06", "ndvi_07",
     "ndvi_anom_06", "ndvi_anom_07",
-    "temp_06", "temp_07",
     "precip_06", "precip_07",
     "windspeed_06", "windspeed_07",
-    "humidity_06", "humidity_07",
+    "vpd_06", "vpd_07",
+    "dist_to_road",
 ]
 
 # X = df[FEATURES]
@@ -107,6 +107,31 @@ for i, (train_idx, test_idx) in enumerate(gkf.split(X, y, groups)):
 print()
 print(f"Mean AUC-ROC: {np.mean(auc_roc_scores):.3f} ± {np.std(auc_roc_scores):.3f}")
 print(f"Mean AUC-PR:  {np.mean(auc_pr_scores):.3f} ± {np.std(auc_pr_scores):.3f}")
+
+# ---- Temporal validation: train on past, test on recent ----
+print("\n=== TEMPORAL VALIDATION ===")
+
+train_mask = df["year"] <= 2018
+test_mask = df["year"] >= 2020
+
+X_train_t = X[train_mask]
+y_train_t = y[train_mask]
+X_test_t = X[test_mask]
+y_test_t = y[test_mask]
+
+print(f"Train (≤2018): {len(X_train_t)} points, {y_train_t.sum()} fires")
+print(f"Test (≥2020):  {len(X_test_t)} points, {y_test_t.sum()} fires")
+
+model_t = XGBClassifier(
+    n_estimators=300, max_depth=5, learning_rate=0.05,
+    subsample=0.8, colsample_bytree=0.8, scale_pos_weight=5,
+    random_state=42, eval_metric="logloss",
+)
+model_t.fit(X_train_t, y_train_t)
+
+probs_t = model_t.predict_proba(X_test_t)[:, 1]
+print(f"Temporal AUC-ROC: {roc_auc_score(y_test_t, probs_t):.3f}")
+print(f"Temporal AUC-PR:  {average_precision_score(y_test_t, probs_t):.3f}")
 
 # train one final model on all the data (same hyperparameters as the CV folds)
 final_model = XGBClassifier(

@@ -2,6 +2,7 @@ import requests
 import geopandas as gpd
 import pandas as pd
 from pathlib import Path
+import numpy as np
 
 RAW = Path("data/raw/roads")
 RAW.mkdir(parents=True, exist_ok=True)
@@ -43,3 +44,29 @@ all_roads = pd.concat(road_gdfs, ignore_index=True)
 all_roads = gpd.GeoDataFrame(all_roads, crs=road_gdfs[0].crs)
 print("Total road segments:", len(all_roads))
 print("CRS:", all_roads.crs)
+
+# reproject roads to UTM
+print("Reprojecting roads to UTM...")
+all_roads_utm = all_roads.to_crs("EPSG:32610")
+
+# load training points
+points = gpd.read_file("data/processed/training_features.gpkg")
+print("Points loaded:", len(points))
+
+# nearest-road distance via spatial join
+print("Computing nearest-road distances...")
+joined = gpd.sjoin_nearest(points, all_roads_utm, how="left", distance_col="dist_to_road")
+
+# sjoin_nearest can create duplicate rows if ties occur; keep first per point
+joined = joined[~joined.index.duplicated(keep="first")]
+
+print("Distance to road (m):")
+print(joined["dist_to_road"].describe())
+
+# attach distance back to points and save
+points["dist_to_road"] = joined["dist_to_road"].values
+
+# save updated feature table
+points.to_file("data/processed/training_features.gpkg", driver="GPKG")
+points.drop(columns="geometry").to_csv("data/processed/training_features.csv", index=False)
+print("Saved training table with dist_to_road:", points.shape)

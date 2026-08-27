@@ -300,6 +300,16 @@ for month in [6, 7, 8, 9]:
 
 print(gdf[[f"temp_{m:02d}" for m in [6,7,8,9]]].describe())
 
+# vapor pressure deficit (kPa) - Tetens' equation, requires temp in Celsius
+for month in [6, 7]:
+    t = gdf[f"temp_{month:02d}"]          # already Celsius
+    rh = gdf[f"humidity_{month:02d}"]     # percent
+    sat_vp = 0.6108 * np.exp(17.27 * t / (t + 237.3))
+    actual_vp = sat_vp * (rh / 100)
+    gdf[f"vpd_{month:02d}"] = sat_vp - actual_vp
+
+print(gdf[[f"vpd_{m:02d}" for m in [6, 7]]].describe())
+
 # drop the temporary lat/lon helper columns if you want, or keep them
 # save the completed feature table
 OUT = Path("data/processed")
