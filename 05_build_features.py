@@ -300,6 +300,35 @@ for month in [6, 7, 8, 9]:
 
 print(gdf[[f"temp_{m:02d}" for m in [6,7,8,9]]].describe())
 
+# ---- Spring precipitation (Jan-May total) ----
+gdf["spring_precip"] = np.nan
+
+for year in sorted(gdf["year"].unique()):
+    spring_path = WEATHER_DIR / f"era5_{year}_spring.nc"
+    if not spring_path.exists():
+        print(f"  Missing spring: {year}")
+        continue
+
+    # spring files may also be zipped like the summer ones - handle both
+    ds = xr.open_dataset(spring_path)
+
+    mask = gdf["year"] == year
+    lats = gdf.loc[mask, "lat"].values
+    lons = gdf.loc[mask, "lon"].values
+
+    # sum total precipitation across all Jan-May time steps, per grid cell
+    total_precip = ds["tp"].sum(dim="valid_time")
+    sampled = total_precip.sel(
+        latitude=xr.DataArray(lats, dims="points"),
+        longitude=xr.DataArray(lons, dims="points"),
+        method="nearest",
+    ).values
+
+    gdf.loc[mask, "spring_precip"] = sampled
+    ds.close()
+
+print("Spring precip range:", gdf["spring_precip"].min(), "to", gdf["spring_precip"].max())
+
 # vapor pressure deficit (kPa) - Tetens' equation, requires temp in Celsius
 for month in [6, 7]:
     t = gdf[f"temp_{month:02d}"]          # already Celsius

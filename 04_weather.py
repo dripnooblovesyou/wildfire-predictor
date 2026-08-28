@@ -39,3 +39,33 @@ def download_year(year):
 
 for year in range(2000, 2026):
     download_year(year)
+
+
+# spring downloads
+def download_spring(year):
+    """Download Jan-May total precipitation for one year."""
+    out = RAW / f"era5_{year}_spring.nc"
+    if out.exists():
+        print(f"  Already have {out.name}")
+        return
+
+    print(f"  Requesting spring {year}...")
+    c.retrieve(
+        "reanalysis-era5-single-levels",
+        {
+            "product_type": "reanalysis",
+            "variable": ["total_precipitation"],
+            "year": str(year),
+            "month": ["01", "02", "03", "04", "05"],
+            "day": [f"{d:02d}" for d in range(1, 32)],
+            "time": ["12:00"],
+            "area": [49.0, -124.8, 42.0, -116.5],
+            "format": "netcdf",
+        },
+        str(out),
+    )
+    print(f"  Saved {out.name}")
+
+# download spring for all years
+for year in range(2000, 2026):
+    download_spring(year)
