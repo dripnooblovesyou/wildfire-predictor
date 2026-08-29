@@ -38,10 +38,11 @@ FEATURES_CLEAN = [
     "elevation", "slope", "northness", "eastness",
     "ndvi_06", "ndvi_07",
     "ndvi_anom_06", "ndvi_anom_07",
+    "vpd_06", "vpd_07",
     "precip_06", "precip_07",
     "windspeed_06", "windspeed_07",
-    "vpd_06", "vpd_07",
     "dist_to_road",
+    "spring_precip",
 ]
 
 # X = df[FEATURES]
