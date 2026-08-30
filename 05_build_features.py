@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from shapely.geometry import Point, box
 import rasterio
+from pyproj import Transformer
 
 
 fires = gpd.read_file("data/raw/fire/pnw_fires_clean.geojson")
@@ -338,6 +339,20 @@ for month in [6, 7]:
     gdf[f"vpd_{month:02d}"] = sat_vp - actual_vp
 
 print(gdf[[f"vpd_{m:02d}" for m in [6, 7]]].describe())
+
+# fuel raster is in Albers EPSG:5070 — transform points from UTM to Albers
+to_albers = Transformer.from_crs("EPSG:32610", "EPSG:5070", always_xy=True)
+fuel_x, fuel_y = to_albers.transform(gdf["x"].values, gdf["y"].values)
+fuel_coords = list(zip(fuel_x, fuel_y))
+
+with rasterio.open("data/raw/fuel/LF2023_FBFM40_CONUS.tif") as src:
+    fuel_codes = np.array([v[0] for v in src.sample(fuel_coords)], dtype=float)
+
+gdf["fuel_code"] = fuel_codes
+
+# check what we got
+print("Fuel code counts:")
+print(pd.Series(fuel_codes).value_counts().head(20))
 
 # drop the temporary lat/lon helper columns if you want, or keep them
 # save the completed feature table
