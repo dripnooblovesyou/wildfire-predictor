@@ -354,6 +354,32 @@ gdf["fuel_code"] = fuel_codes
 print("Fuel code counts:")
 print(pd.Series(fuel_codes).value_counts().head(20))
 
+def fuel_group(code):
+    """Map FBFM40 code to broad fuel type."""
+    if code in (91, 92, 93, 98, 99):
+        return "nonburnable"
+    elif 101 <= code <= 109:
+        return "grass"
+    elif 121 <= code <= 124:
+        return "grass_shrub"
+    elif 141 <= code <= 149:
+        return "shrub"
+    elif 161 <= code <= 165:
+        return "timber_understory"
+    elif 181 <= code <= 189:
+        return "timber_litter"
+    else:
+        return "other"
+
+gdf["fuel_group"] = gdf["fuel_code"].apply(fuel_group)
+print(gdf["fuel_group"].value_counts())
+
+# one-hot encode fuel groups into binary columns
+fuel_dummies = pd.get_dummies(gdf["fuel_group"], prefix="fuel").astype(int)
+gdf = pd.concat([gdf, fuel_dummies], axis=1)
+
+print("Fuel columns added:", fuel_dummies.columns.tolist())
+
 # drop the temporary lat/lon helper columns if you want, or keep them
 # save the completed feature table
 OUT = Path("data/processed")

@@ -43,6 +43,8 @@ FEATURES_CLEAN = [
     "windspeed_06", "windspeed_07",
     "dist_to_road",
     "spring_precip",
+    "fuel_grass", "fuel_grass_shrub", "fuel_shrub",
+    "fuel_timber_understory", "fuel_timber_litter", "fuel_nonburnable",
 ]
 
 # X = df[FEATURES]
